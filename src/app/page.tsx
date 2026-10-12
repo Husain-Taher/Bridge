@@ -11,7 +11,7 @@ import { PwaInstallBanner } from '../components/PwaInstallBanner';
 import { TransferItem, TransferType } from '../lib/types';
 import { TransferService } from '../lib/api/transfer-service';
 import { PairingService } from '../lib/api/pairing-service';
-import { getOrCreateDeviceId, getOrCreateMasterKey, getStoredDeviceInfo } from '../lib/device-storage';
+import { getOrCreateMasterKey, getOrCreateUserId, getStoredDeviceInfo } from '../lib/device-storage';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase/client';
 
 export default function BridgeHome() {
@@ -32,21 +32,37 @@ export default function BridgeHome() {
     try {
       setIsLoading(true);
 
+      // Check if opened via QR pairing link (?pair=...)
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const pairParam = urlParams.get('pair');
+        if (pairParam) {
+          try {
+            const deviceInfo = getStoredDeviceInfo();
+            await PairingService.completePairingFromQr(pairParam, deviceInfo.deviceName, deviceInfo.deviceType);
+            // Clean the URL without reloading
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (pairErr) {
+            console.error('Auto-pairing from link failed:', pairErr);
+          }
+        }
+      }
+
       // 1. Get or create master 256-bit AES-GCM encryption key
       const keyResult = await getOrCreateMasterKey();
       setMasterKey(keyResult.key);
       setMasterKeyBase64(keyResult.keyBase64);
 
-      // 2. Determine User ID (from Supabase Auth or persistent local identity)
-      let resolvedUserId = getOrCreateDeviceId();
+      // 2. Determine User ID (from Supabase Auth or persistent shared identity)
+      let resolvedUserId = getOrCreateUserId();
       if (isSupabaseConfigured()) {
         const supabase = getSupabaseClient();
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.id) {
           resolvedUserId = session.user.id;
         } else {
-          // Anonymous or local identity fallback
-          resolvedUserId = getOrCreateDeviceId();
+          // Anonymous or persistent local/paired identity
+          resolvedUserId = getOrCreateUserId();
         }
       }
       setUserId(resolvedUserId);

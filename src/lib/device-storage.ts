@@ -33,6 +33,26 @@ export function getDefaultDeviceName(): string {
   return os;
 }
 
+const USER_ID_STORAGE_NAME = 'bridge_user_id_v1';
+
+// Get or generate persistent user ID
+export function getOrCreateUserId(): string {
+  if (typeof window === 'undefined') return 'srv-placeholder-id';
+  let userId = localStorage.getItem(USER_ID_STORAGE_NAME);
+  if (!userId) {
+    userId = getOrCreateDeviceId();
+    localStorage.setItem(USER_ID_STORAGE_NAME, userId);
+  }
+  return userId;
+}
+
+// Store paired user ID
+export function storeUserId(userId: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(USER_ID_STORAGE_NAME, userId);
+  }
+}
+
 // Get or generate local device ID
 export function getOrCreateDeviceId(): string {
   if (typeof window === 'undefined') return 'srv-placeholder-id';
@@ -111,6 +131,7 @@ export async function storeMasterKey(keyBase64: string): Promise<CryptoKey> {
 export function clearLocalBridgeData(): void {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(KEY_STORAGE_NAME);
+    localStorage.removeItem(USER_ID_STORAGE_NAME);
     localStorage.removeItem(DEVICE_ID_STORAGE_NAME);
     localStorage.removeItem(DEVICE_NAME_STORAGE_NAME);
     localStorage.removeItem(DEVICE_TYPE_STORAGE_NAME);

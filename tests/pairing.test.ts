@@ -19,8 +19,14 @@ describe('Pairing & Device Management Lifecycle', () => {
     assert.equal(invitation.status, 'pending');
     assert.ok(new Date(invitation.expires_at).getTime() > Date.now());
 
-    // QR Payload should contain JSON with code, userId, masterKeyBase64
-    const parsed = JSON.parse(qrPayload);
+    // QR Payload should contain pairing URL or JSON with code, userId, masterKeyBase64
+    let parsed: Record<string, unknown>;
+    if (qrPayload.includes('pair=')) {
+      const match = qrPayload.match(/pair=([^&]+)/);
+      parsed = JSON.parse(Buffer.from(decodeURIComponent(match![1]), 'base64').toString('utf8'));
+    } else {
+      parsed = JSON.parse(qrPayload);
+    }
     assert.equal(parsed.code, invitation.invitation_code);
     assert.equal(parsed.userId, 'user-123');
     assert.equal(parsed.masterKeyBase64, keyB64);

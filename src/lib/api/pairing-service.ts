@@ -1,7 +1,7 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase/client';
 import { Device, DeviceType, PairingInvitation } from '../types';
 import { generatePairingCode } from '../crypto';
-import { getStoredDeviceInfo, storeMasterKey } from '../device-storage';
+import { getStoredDeviceInfo, storeMasterKey, storeUserId } from '../device-storage';
 
 const LOCAL_STORAGE_DEVICES_KEY = 'bridge_local_devices_v1';
 const LOCAL_STORAGE_INVITATIONS_KEY = 'bridge_local_invitations_v1';
@@ -31,7 +31,8 @@ export class PairingService {
     const ephemeralKey = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes expiry
     const id = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `inv-${Date.now()}`;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    const rawAppUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+    const appUrl = rawAppUrl.replace(/\/$/, '');
 
     const qrData: QrPairingPayload = {
       version: 1,
@@ -41,7 +42,10 @@ export class PairingService {
       masterKeyBase64,
       expiresAt,
     };
-    const qrPayload = JSON.stringify(qrData);
+    
+    // Encode pairing payload so native phone camera opens directly to Bridge with pairing query
+    const encodedPayload = typeof btoa === 'function' ? btoa(JSON.stringify(qrData)) : Buffer.from(JSON.stringify(qrData)).toString('base64');
+    const qrPayload = `${appUrl}/?pair=${encodeURIComponent(encodedPayload)}`;
 
     const invitation: PairingInvitation = {
       id,
@@ -87,15 +91,41 @@ export class PairingService {
    * Complete pairing on a second device using the scanned QR payload
    */
   static async completePairingFromQr(
-    payloadJson: string,
+    rawInput: string,
     newDeviceName: string,
     newDeviceType: DeviceType
   ): Promise<{ success: boolean; masterKey: CryptoKey }> {
+    let payloadJson = rawInput.trim();
+
+    // Check if input is a URL containing ?pair=...
+    if (payloadJson.includes('pair=')) {
+      try {
+        const url = new URL(payloadJson);
+        const pairParam = url.searchParams.get('pair');
+        if (pairParam) {
+          payloadJson = typeof atob === 'function' ? atob(decodeURIComponent(pairParam)) : Buffer.from(decodeURIComponent(pairParam), 'base64').toString('utf8');
+        }
+      } catch {
+        const match = payloadJson.match(/pair=([^&]+)/);
+        if (match) {
+          const pairParam = match[1];
+          payloadJson = typeof atob === 'function' ? atob(decodeURIComponent(pairParam)) : Buffer.from(decodeURIComponent(pairParam), 'base64').toString('utf8');
+        }
+      }
+    } else if (!payloadJson.startsWith('{')) {
+      // Might be direct base64 string
+      try {
+        payloadJson = typeof atob === 'function' ? atob(payloadJson) : Buffer.from(payloadJson, 'base64').toString('utf8');
+      } catch {
+        // Keep as is and let JSON.parse attempt
+      }
+    }
+
     let payload: QrPairingPayload;
     try {
       payload = JSON.parse(payloadJson);
     } catch {
-      throw new Error('Invalid QR code format.');
+      throw new Error('Invalid QR code format or pairing link.');
     }
 
     if (new Date(payload.expiresAt) < new Date()) {
@@ -109,7 +139,10 @@ export class PairingService {
     // 1. Store and verify master encryption key on the new device
     const masterKey = await storeMasterKey(payload.masterKeyBase64);
 
-    // 2. Register the new device in the system
+    // 2. Persist the paired user ID so all transfers sync under the same identity
+    storeUserId(payload.userId);
+
+    // 3. Register the new device in the system
     await this.registerDevice(payload.userId, newDeviceName, newDeviceType);
 
     return { success: true, masterKey };
