@@ -9,26 +9,23 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export const PwaInstallBanner: React.FC = () => {
+  const [mounted, setMounted] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isIos] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const ua = window.navigator.userAgent.toLowerCase();
-    return /iphone|ipad|ipod/.test(ua) && !(window as unknown as { MSStream: unknown }).MSStream;
-  });
-
-  const [isStandalone] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return (
-      window.matchMedia('(display-mode: standalone)').matches ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window.navigator as any).standalone === true
-    );
-  });
-
+  const [isIos, setIsIos] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
+      const ua = window.navigator.userAgent.toLowerCase();
+      setIsIos(/iphone|ipad|ipod/.test(ua) && !(window as unknown as { MSStream: unknown }).MSStream);
+      setIsStandalone(
+        window.matchMedia('(display-mode: standalone)').matches ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window.navigator as any).standalone === true
+      );
+
       const handleBeforeInstall = (e: Event) => {
         e.preventDefault();
         setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -49,8 +46,8 @@ export const PwaInstallBanner: React.FC = () => {
     }
   };
 
-  // Do not show banner if already installed or dismissed
-  if (isStandalone || isDismissed || (!deferredPrompt && !isIos)) {
+  // Do not show banner if not mounted, already installed or dismissed
+  if (!mounted || isStandalone || isDismissed || (!deferredPrompt && !isIos)) {
     return null;
   }
 

@@ -18,13 +18,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   isSyncing = false,
 }) => {
-  const [deviceInfo] = React.useState(() => {
-    if (typeof window !== 'undefined') {
-      const info = getStoredDeviceInfo();
-      return { deviceName: info.deviceName, deviceType: info.deviceType };
-    }
-    return { deviceName: 'Bridge Device', deviceType: 'laptop' };
+  const [deviceInfo, setDeviceInfo] = React.useState({
+    deviceName: 'My Device',
+    deviceType: 'laptop',
   });
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+    const info = getStoredDeviceInfo();
+    setDeviceInfo({ deviceName: info.deviceName, deviceType: info.deviceType });
+  }, []);
 
   const isConfigured = isSupabaseConfigured();
 
@@ -53,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden md:flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300">
             <HardDrive className="w-3.5 h-3.5 text-indigo-500" />
-            <span className="font-medium">{deviceInfo.deviceName}</span>
+            <span className="font-medium">{mounted ? deviceInfo.deviceName : 'My Device'}</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400">
