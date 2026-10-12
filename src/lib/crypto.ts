@@ -1,7 +1,7 @@
 import { EncryptedFileResult, EncryptedPayload } from './types';
 
 // Cross-environment Web Crypto API accessor
-const getSubtleCrypto = (): SubtleCrypto => {
+export const getSubtleCrypto = (): SubtleCrypto => {
   if (typeof globalThis !== 'undefined' && globalThis.crypto?.subtle) {
     return globalThis.crypto.subtle;
   }

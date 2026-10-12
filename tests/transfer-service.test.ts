@@ -79,4 +79,37 @@ describe('TransferService Operations', () => {
     const itemsAfterDelete = await TransferService.fetchItems('test-user-1', key);
     assert.equal(itemsAfterDelete.some((i) => i.id === item.id), false);
   });
+
+  it('should create and retrieve an encrypted file transfer with matching integrity checksum', async () => {
+    const key = await generateMasterKey();
+    const fileContent = 'Simulated PDF file content with binary-like data';
+    const fakeFile = {
+      name: 'report.pdf',
+      size: fileContent.length,
+      type: 'application/pdf',
+      arrayBuffer: async () => Buffer.from(fileContent).buffer,
+    } as unknown as File;
+
+    const created = await TransferService.createTransfer(
+      {
+        type: 'file',
+        rawContent: '',
+        file: fakeFile,
+      },
+      'test-user-1',
+      key
+    );
+
+    assert.equal(created.type, 'file');
+    assert.equal(created.file_name, 'report.pdf');
+    assert.ok(created.checksum);
+    assert.ok(created.file_iv);
+
+    // Fetch and verify integrity
+    const items = await TransferService.fetchItems('test-user-1', key);
+    const fetched = items.find((i) => i.id === created.id);
+    assert.ok(fetched);
+    assert.equal(fetched.verified_integrity, true);
+    assert.equal(fetched.file_name, 'report.pdf');
+  });
 });

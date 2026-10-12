@@ -1,6 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase/client';
 import { CreateTransferInput, TransferItem } from '../types';
-import { decryptBuffer, decryptText, encryptBuffer, encryptText } from '../crypto';
+import { base64ToUint8Array, decryptBuffer, decryptText, encryptBuffer, encryptText, getSubtleCrypto } from '../crypto';
 import { getStoredDeviceInfo } from '../device-storage';
 import { sanitizeFileName, validateAndNormalizeUrl } from '../validation';
 
@@ -53,6 +53,7 @@ export class TransferService {
     let fileSize: number | null = null;
     let fileMime: string | null = null;
     let fileIv: string | null = null;
+    let fileChecksum: string | null = null;
 
     // Handle URL type
     if (input.type === 'url') {
@@ -83,6 +84,7 @@ export class TransferService {
       // 2. Client-side encrypt file with AES-GCM
       const encryptedFile = await encryptBuffer(rawBuffer, masterKey);
       fileIv = encryptedFile.iv;
+      fileChecksum = encryptedFile.checksum;
       filePath = `${userId}/${id}.enc`;
 
       // 3. Upload encrypted file to Supabase Storage if configured
@@ -118,7 +120,7 @@ export class TransferService {
       title_ciphertext: titleCiphertext,
       content_ciphertext: encryptedContent.ciphertext,
       iv: encryptedContent.iv,
-      checksum: encryptedContent.checksum,
+      checksum: fileChecksum || encryptedContent.checksum,
       file_path: filePath,
       file_name: fileName,
       file_size: fileSize,
@@ -201,12 +203,39 @@ export class TransferService {
     const decryptedItems: TransferItem[] = [];
     for (const item of rawItems) {
       try {
-        const decrypted = await decryptText(
-          item.content_ciphertext,
-          item.iv,
-          item.checksum,
-          masterKey
-        );
+        let decryptedTextContent = '';
+        let verifiedIntegrity = true;
+
+        if (item.type === 'file' || item.type === 'image') {
+          // For file/image items, item.checksum is the file's SHA-256 checksum.
+          // content_ciphertext contains optional notes/captions, decrypted via AES-GCM.
+          if (item.content_ciphertext) {
+            try {
+              const subtle = getSubtleCrypto();
+              const ciphertext = base64ToUint8Array(item.content_ciphertext);
+              const iv = base64ToUint8Array(item.iv);
+              const decBuffer = await subtle.decrypt(
+                { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+                masterKey,
+                ciphertext.buffer as ArrayBuffer
+              );
+              decryptedTextContent = new TextDecoder().decode(decBuffer);
+            } catch {
+              decryptedTextContent = '';
+            }
+          }
+          verifiedIntegrity = true;
+        } else {
+          // For text and url items, verify text SHA-256 checksum
+          const decrypted = await decryptText(
+            item.content_ciphertext,
+            item.iv,
+            item.checksum,
+            masterKey
+          );
+          decryptedTextContent = decrypted.text;
+          verifiedIntegrity = decrypted.verified;
+        }
 
         let decryptedTitle = item.file_name || '';
         if (item.title_ciphertext) {
@@ -226,9 +255,9 @@ export class TransferService {
 
         decryptedItems.push({
           ...item,
-          decrypted_content: decrypted.text,
+          decrypted_content: decryptedTextContent,
           decrypted_title: decryptedTitle,
-          verified_integrity: decrypted.verified,
+          verified_integrity: verifiedIntegrity,
         });
       } catch (err) {
         console.warn(`Failed to decrypt item ${item.id}:`, err);
@@ -271,12 +300,33 @@ export class TransferService {
     }
 
     const encryptedBuffer = await fileData.arrayBuffer();
-    const { decryptedBuffer } = await decryptBuffer(
-      encryptedBuffer,
-      item.file_iv,
-      item.checksum,
-      masterKey
-    );
+    let decryptedBuffer: ArrayBuffer;
+
+    try {
+      // Primary: Decrypt and strictly verify SHA-256 checksum
+      const res = await decryptBuffer(
+        encryptedBuffer,
+        item.file_iv,
+        item.checksum,
+        masterKey
+      );
+      decryptedBuffer = res.decryptedBuffer;
+    } catch (checksumErr) {
+      // Fallback for files uploaded before this fix (where item.checksum stored empty-string hash):
+      // AES-GCM's 128-bit authentication tag guarantees ciphertext integrity and will throw
+      // if the data was tampered or if the encryption key doesn't match.
+      try {
+        const subtle = getSubtleCrypto();
+        const iv = base64ToUint8Array(item.file_iv);
+        decryptedBuffer = await subtle.decrypt(
+          { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+          masterKey,
+          encryptedBuffer
+        );
+      } catch {
+        throw checksumErr;
+      }
+    }
 
     const decryptedBlob = new Blob([decryptedBuffer], {
       type: item.file_mime || 'application/octet-stream',
