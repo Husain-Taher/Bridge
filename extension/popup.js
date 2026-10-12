@@ -32,6 +32,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabTitleEl.textContent = 'Active tab unavailable';
   }
 
+  const btnToggleConfig = document.getElementById('btn-toggle-config');
+  const configSection = document.getElementById('config-section');
+  const bridgeUrlInput = document.getElementById('bridge-url-input');
+  const btnSaveConfig = document.getElementById('btn-save-config');
+
+  // Load existing Bridge server URL
+  chrome.storage.local.get(['bridge_url'], (res) => {
+    if (res.bridge_url && bridgeUrlInput) {
+      bridgeUrlInput.value = res.bridge_url;
+    }
+  });
+
+  if (btnToggleConfig && configSection) {
+    btnToggleConfig.addEventListener('click', () => {
+      configSection.classList.toggle('hidden');
+    });
+  }
+
+  if (btnSaveConfig && bridgeUrlInput) {
+    btnSaveConfig.addEventListener('click', () => {
+      const newUrl = bridgeUrlInput.value.trim().replace(/\/$/, '');
+      if (!newUrl) {
+        showToast('Please enter a valid URL.', 'error');
+        return;
+      }
+      chrome.storage.local.set({ bridge_url: newUrl }, () => {
+        showToast('Server URL saved!', 'success');
+        if (configSection) configSection.classList.add('hidden');
+      });
+    });
+  }
+
   // Open Bridge Web App
   linkOpenBridge.addEventListener('click', (e) => {
     e.preventDefault();

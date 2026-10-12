@@ -8,6 +8,10 @@
     "storage",
     "scripting"
   ],
+  "host_permissions": [
+    "http://localhost/*",
+    "https://*/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Send to Phone (Bridge)",

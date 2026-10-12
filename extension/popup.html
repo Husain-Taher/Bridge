@@ -51,9 +51,18 @@
     </div>
 
     <!-- Footer Settings & Pairing Link -->
-    <footer class="footer">
-      <span class="shortcut-tip">Shortcut: Alt+Shift+B</span>
-      <a href="#" id="link-open-bridge" class="footer-link">Open Inbox</a>
+    <footer class="footer" style="flex-direction: column; align-items: stretch; gap: 6px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <span class="shortcut-tip">Shortcut: Alt+Shift+B</span>
+        <button id="btn-toggle-config" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 11px;">⚙ Settings</button>
+      </div>
+      <div id="config-section" class="hidden" style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--surface-border);">
+        <input type="text" id="bridge-url-input" placeholder="https://your-bridge.vercel.app" style="width: 100%; padding: 6px; font-size: 11px; background: #18181b; border: 1px solid #27272a; color: #fff; border-radius: 6px; margin-bottom: 6px;" />
+        <button id="btn-save-config" class="btn btn-small" style="width: 100%;">Save Server URL</button>
+      </div>
+      <div style="display: flex; justify-content: flex-end; width: 100%; margin-top: 2px;">
+        <a href="#" id="link-open-bridge" class="footer-link">Open Inbox ↗</a>
+      </div>
     </footer>
   </div>
 
