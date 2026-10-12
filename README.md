@@ -1,32 +1,132 @@
 # Bridge 🌉
 ### Instant Cross-Device Personal Transfer & Universal Clipboard
 
-Bridge is a private, production-ready laptop-to-phone transfer service designed to eliminate the friction of emailing yourself links, creating drafts, messaging yourself on chat apps, or manually re-typing text across devices.
+Bridge is a high-speed, private, zero-knowledge personal transfer service designed to eliminate the friction of emailing yourself links, keeping messaging drafts, or texting yourself across devices. It seamlessly links your **Windows/Mac laptop** and **iOS/Android phone** with end-to-end encryption (AES-GCM-256), real-time synchronization, a Chrome browser extension, and an installable Progressive Web App (PWA).
 
 ---
 
-## 🚀 Key Features
+## 🏗️ System Architecture & Data Flow
 
-- **Instant Link Sharing:** Click the extension or press `Alt + Shift + B` on any webpage on your laptop; it appears immediately in your phone inbox ready to open.
-- **Universal Clipboard & Notes:** Transfer long prompts, code snippets, formatted notes, and instructions with one-tap Copy on mobile.
-- **Client-Side Encrypted File Transfer:** Send PDFs, screenshots, documents, and code files up to 50MB. Files are encrypted client-side with 256-bit AES-GCM before upload and decrypted in-browser upon download.
-- **End-to-End Encryption & Zero-Knowledge Storage:** Plaintext content and encryption keys never leave your devices or touch server logs. Every payload uses unique 96-bit (12-byte) initialization vectors (IVs) and SHA-256 integrity checksums.
-- **Secure QR Code Pairing:** Link your phone to your laptop in seconds by scanning a short-lived QR code that securely exchanges the master transfer key.
-- **Chrome Manifest V3 Extension:** Lightweight browser extension with 1-click "Send Page to Phone", "Send Selected Text", and configurable keyboard shortcuts.
-- **Mobile Progressive Web App (PWA):** Installable on Android and iOS Safari, featuring Web Share Target integration to send links/files directly from your phone's OS share sheet into Bridge.
-- **Persistent & Offline Accessible:** Items remain available in your inbox even when the originating device is powered down.
+```mermaid
+flowchart TD
+    subgraph Client_Devices["Client Devices (Zero-Knowledge Endpoints)"]
+        Laptop["💻 Laptop (Next.js Web App / Chrome Extension)"]
+        Phone["📱 Mobile Phone (Installable PWA / Camera / Share Sheet)"]
+    end
+
+    subgraph Security_Boundary["Client-Side Cryptographic Boundary"]
+        CryptoEngine["🔐 Web Crypto API (SubtleCrypto)\n- AES-GCM-256 Encryption/Decryption\n- Unique 12-byte IV per item\n- SHA-256 Integrity Verification\n- PBKDF2 Master Key Derivation"]
+    end
+
+    subgraph Cloud_Infrastructure["Cloud Infrastructure (Ciphertext Only)"]
+        Vercel["⚡ Vercel Edge / Serverless Hosting\n- Next.js 16 App Router\n- Static Assets & Webpack Builds\n- Extension API Bridge: /api/transfers"]
+        
+        subgraph Supabase["Supabase Backend (Encrypted Storage)"]
+            PG[("🐘 PostgreSQL DB\n- transfer_items\n- devices\n- pairing_invitations\n- Row Level Security (RLS)")]
+            Storage[("📦 Storage Bucket (transfers)\n- *.enc AES-GCM Encrypted Files")]
+            Realtime["⚡ Supabase Realtime\n- Instant WebSocket Changefeeds"]
+        end
+    end
+
+    Laptop <--> CryptoEngine
+    Phone <--> CryptoEngine
+    CryptoEngine -- "Encrypted Payloads & Metadata" --> Vercel
+    Vercel <--> PG
+    CryptoEngine -- "Encrypted Files (*.enc)" --> Storage
+    PG -. "Realtime Event Notification" .-> Realtime
+    Realtime -. "Instant In-Memory Decrypt" .-> Laptop
+    Realtime -. "Instant In-Memory Decrypt" .-> Phone
+```
+
+---
+
+## 🔄 End-to-End Workflows
+
+### 1. Zero-Friction 1-Tap Device Pairing Flow
+Device pairing exchanges the 256-bit AES master key directly between your devices without any intermediary server ever knowing the plaintext key.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant Laptop as 💻 Laptop (Bridge Web)
+    participant Camera as 📸 Phone Camera / Safari
+    participant Phone as 📱 Phone PWA
+    participant DB as 🐘 Supabase PostgreSQL
+
+    User->>Laptop: Clicks "Pair Device"
+    Laptop->>Laptop: Generates Master AES-256 Key & Session ID
+    Laptop->>DB: Stores temporary invitation record (10m TTL)
+    Laptop->>Laptop: Encodes pairing URL with base64 payload
+    Laptop->>User: Displays Pairing QR Code
+    User->>Camera: Points Camera at QR Code
+    Camera->>Phone: Opens https://your-bridge.vercel.app/?pair=...
+    Phone->>Phone: Decodes Master Key & User ID into LocalStorage
+    Phone->>DB: Registers Phone as Paired Device
+    Phone->>User: Renders paired inbox immediately
+    Note over Laptop,Phone: Both devices now share identical 256-bit AES-GCM keys!
+```
+
+---
+
+### 2. End-to-End Encrypted File Transfer Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Sender as 📱 Sender (e.g., Phone)
+    participant EngineS as 🔐 Sender Web Crypto
+    participant Storage as 📦 Supabase Storage
+    participant DB as 🐘 Supabase Database
+    actor Receiver as 💻 Receiver (e.g., Laptop)
+    participant EngineR as 🔐 Receiver Web Crypto
+
+    Sender->>EngineS: Drops File (PDF, image, doc <= 50MB)
+    EngineS->>EngineS: Computes SHA-256 file checksum
+    EngineS->>EngineS: Encrypts file with AES-GCM-256 & random 12-byte IV
+    EngineS->>Storage: Uploads encrypted buffer to transfers/userId/itemId.enc
+    EngineS->>DB: Inserts item metadata (encrypted title, IV, SHA-256 checksum)
+    DB-->>Receiver: Realtime notification triggers refresh
+    Receiver->>DB: Downloads item metadata
+    Receiver->>Storage: Downloads encrypted buffer (*.enc)
+    Receiver->>EngineR: Decrypts buffer with local Master Key
+    EngineR->>EngineR: Verifies decrypted buffer SHA-256 against item checksum
+    EngineR-->>Receiver: Prompts browser file save with verified original filename
+```
+
+---
+
+## 🚀 Core Features & Usage
+
+| Feature | Description | Shortcut / Access |
+| :--- | :--- | :--- |
+| **Instant URL Pushing** | Send any browser tab from your PC to your phone in one keystroke. | `Alt + Shift + B` (PC) |
+| **Universal Clipboard** | Push prompts, tokens, code snippets, and formatted text directly to your mobile clipboard. | Composer &rarr; "Note / Snippet" |
+| **Encrypted File Transfer** | Transfer documents, images, and files up to 50MB with client-side AES-GCM encryption and SHA-256 validation. | Drag & Drop / File Picker |
+| **Chrome Companion** | Manifest V3 extension featuring 1-click tab send, selected text push, and configurable server endpoint. | Chrome Toolbar Icon |
+| **Mobile PWA** | Native-feeling standalone app for iOS and Android with no app store download required. | "Add to Home Screen" |
+| **Web Share Target** | Send articles, URLs, or files directly into Bridge from Twitter, Reddit, Safari, or Chrome on your phone. | Mobile System Share Sheet (`⎋`) |
+| **Zero-Knowledge Security** | Client-side encryption ensures neither Supabase, Vercel, nor network sniffers can view your data. | Web Crypto API (AES-GCM) |
+| **Device Revocation** | Instantly unlink lost or old devices from your account with 1 click. | Navbar &rarr; Devices Modal |
 
 ---
 
 ## 🛠️ Technology Stack
 
-- **Frontend & App:** Next.js (App Router), React 19, TypeScript, Tailwind CSS, Lucide Icons.
-- **Cryptography:** Web Crypto API (`globalThis.crypto.subtle`) using AES-GCM-256, PBKDF2 (SHA-256, 100,000 rounds), SHA-256 digest checksums.
-- **Backend & Database:** Supabase PostgreSQL with strict Row Level Security (RLS) on all tables.
-- **Real-time Sync:** Supabase Realtime authenticated channels with local event fallback.
-- **File Storage:** Private Supabase Storage bucket (`transfers`) with folder-scoped user RLS policies.
-- **Browser Extension:** Chrome Manifest V3 with background service worker and local secure storage.
-- **Testing:** Node.js native test runner (`node:test`, `node:assert`) with TypeScript test execution via `tsx`.
+- **Frontend Framework:** [Next.js](https://nextjs.org/) (App Router, React 19, TypeScript)
+- **Styling & UI:** [Tailwind CSS](https://tailwindcss.com/) v3.4, PostCSS, [Lucide Icons](https://lucide.dev/)
+- **Cryptography:** Native Web Crypto API (`globalThis.crypto.subtle`)
+  - 256-bit AES-GCM symmetric encryption
+  - 96-bit (12-byte) cryptographically random IVs
+  - SHA-256 cryptographic digest integrity validation
+  - PBKDF2 key derivation (100,000 iterations)
+- **Cloud Backend:** [Supabase](https://supabase.com/)
+  - PostgreSQL with Row Level Security (RLS)
+  - Realtime WebSocket publication channels
+  - Encrypted Storage buckets (`transfers`)
+- **Hosting & CI/CD:** [Vercel](https://vercel.com/) (Edge Network & Serverless Functions)
+- **Browser Extension:** Chrome Manifest V3 with Service Worker and Host Permissions
+- **Testing:** Node.js native test runner (`node:test`, `node:assert`, `tsx`)
 
 ---
 
@@ -36,152 +136,115 @@ Bridge is a private, production-ready laptop-to-phone transfer service designed 
 Personal-Share/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx               # Primary inbox & transfer workspace
-│   │   ├── layout.tsx             # Root layout with PWA manifest & SW registration
-│   │   ├── globals.css            # Tailwind theme styles
-│   │   └── api/transfers/route.ts # HTTP API for Extension & desktop companion
+│   │   ├── page.tsx               # Main inbox, realtime subscription & pairing handlers
+│   │   ├── layout.tsx             # Root layout, manifest linking & Service Worker
+│   │   ├── globals.css            # Tailwind theme tokens & utility imports
+│   │   └── api/transfers/route.ts # HTTP API route for Chrome Extension
 │   ├── components/
-│   │   ├── Navbar.tsx             # Brand header, sync state, device indicators
-│   │   ├── SendComposer.tsx       # Link, note, and encrypted file composer
-│   │   ├── InboxList.tsx          # Real-time decrypted items, search & filters
-│   │   ├── PairingModal.tsx       # QR code generator, short code & pairing claim
-│   │   ├── DeviceManagerModal.tsx # Active devices & revocation controls
-│   │   ├── SettingsModal.tsx      # Master key export/import & retention settings
+│   │   ├── Navbar.tsx             # Brand header, sync pulse & modal controls
+│   │   ├── SendComposer.tsx       # Link, note, and encrypted file drag-and-drop
+│   │   ├── InboxList.tsx          # Real-time decrypted items, search, filters & download
+│   │   ├── PairingModal.tsx       # 1-tap QR generator, pairing code & manual claim
+│   │   ├── DeviceManagerModal.tsx # Active paired devices & revocation controls
+│   │   ├── SettingsModal.tsx      # Master encryption key export/import & retention settings
 │   │   └── PwaInstallBanner.tsx   # Device-aware install prompts (iOS / Android)
 │   └── lib/
-│       ├── types.ts               # Core TypeScript data contracts
+│       ├── types.ts               # Core TypeScript definitions & contracts
 │       ├── crypto.ts              # Web Crypto AES-GCM, SHA-256, and key derivation
-│       ├── validation.ts          # Zod schemas, URL normalization & sanitization
-│       ├── device-storage.ts      # Device identity & local key storage
+│       ├── validation.ts          # Zod schemas, URL normalization & file sanitization
+│       ├── device-storage.ts      # Local persistent storage for keys and device identity
 │       └── api/
-│           ├── transfer-service.ts# End-to-end transfer lifecycle & realtime
-│           └── pairing-service.ts # Pairing invitation & device management
+│           ├── transfer-service.ts# E2EE item creation, fetching, and download orchestration
+│           └── pairing-service.ts # Device registration & QR pairing invitation lifecycle
 ├── extension/                     # Chrome Manifest V3 Companion
 │   ├── manifest.json              # Extension manifest (shortcuts, permissions)
-│   ├── popup.html                 # Extension popup UI
-│   ├── popup.js                   # Extension popup logic (activeTab query, selection)
+│   ├── popup.html                 # Extension popup UI with settings drawer
+│   ├── popup.js                   # Extension popup logic (tab query, text selection)
 │   ├── popup.css                  # Extension dark styling
 │   ├── background.js              # Service worker (Alt+Shift+B shortcut handler)
-│   └── icons/                     # 16px, 48px, 128px extension icons
+│   └── icons/                     # 16px, 48px, 128px high-resolution PNG icons
 ├── supabase/
 │   └── migrations/
-│       └── 20261012_init_bridge_schema.sql # Production PostgreSQL DDL, RLS, & Storage
-├── tests/                         # Automated test suite
-│   ├── crypto.test.ts             # AES-GCM roundtrips, IV uniqueness, checksums
-│   ├── validation.test.ts         # URL security, malicious scheme blocking, Zod
-│   ├── pairing.test.ts            # QR payload, expiry enforcement, revocation
-│   └── transfer-service.test.ts   # Item encryption, fetching, pinning, deletion
+│       ├── 20261012_init_bridge_schema.sql  # Initial schema migration
+│       └── 20261012_fix_anon_access.sql     # Clean migration for frictionless personal mode
+├── tests/                         # Automated unit & integration test suite (26 tests)
+│   ├── crypto.test.ts             # AES-GCM roundtrips, IV uniqueness, checksum verification
+│   ├── validation.test.ts         # URL security, malicious scheme blocking, Zod rules
+│   ├── pairing.test.ts            # QR payload format, expiry, and revocation tests
+│   └── transfer-service.test.ts   # E2EE text, URL, and file transfer lifecycle tests
 ├── public/
-│   ├── manifest.json              # Web App Manifest & Web Share Target
-│   └── sw.js                      # PWA Service Worker
+│   ├── icon-192.png               # High-res PWA icon (192x192)
+│   ├── icon-512.png               # High-res PWA icon (512x512)
+│   ├── manifest.json              # Web App Manifest & Web Share Target configuration
+│   └── sw.js                      # PWA Service Worker caching
 ├── .env.example                   # Environment configuration template
 └── README.md
 ```
 
 ---
 
-## ⚡ Quick Start (Local Development)
+## ⚡ Setup & Deployment Guide
 
-### 1. Install Dependencies
-```bash
-npm install
-```
+### 1. Configure Supabase
+1. Create a project on [supabase.com](https://supabase.com).
+2. In your Supabase dashboard, open the **SQL Editor** &rarr; **New Query**.
+3. Paste and run `supabase/migrations/20261012_fix_anon_access.sql`.
+4. Copy your **Project URL** and **anon public key** from **Project Settings &rarr; API**.
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env.local`:
-```bash
-cp .env.example .env.local
-```
-*(Note: Bridge includes an offline/local zero-config fallback mode that works immediately out of the box even before cloud credentials are provided).*
+### 2. Configure Vercel
+1. In your [Vercel Dashboard](https://vercel.com), navigate to your Bridge project.
+2. Go to **Settings &rarr; Environment Variables** and add:
+   - `NEXT_PUBLIC_SUPABASE_URL`: `https://your-project.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: `eyJhbGci...`
+3. Trigger a **Redeploy** to build the environment variables into the client bundle.
 
-### 3. Run Development Server
-```bash
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+### 3. Load Chrome Extension
+1. Open Google Chrome and visit `chrome://extensions`.
+2. Toggle **Developer mode** to **ON** (top right).
+3. Click **Load unpacked** and select the `Personal-Share/extension` folder.
+4. Click the extension icon &rarr; click **⚙ Settings** &rarr; enter your Vercel URL (e.g. `https://bridge.vercel.app`) &rarr; **Save Server URL**.
+5. Press **`Alt + Shift + B`** on any tab to test!
 
-### 4. Run Automated Tests
+### 4. Install Mobile PWA
+1. On your PC, click **Pair Device** in the Bridge navbar to display your pairing QR code.
+2. Open your phone's native **Camera app** and scan the QR code.
+3. Tap the link to open Bridge — your phone is **instantly paired** with your laptop.
+4. Save as a native PWA:
+   - **iPhone (Safari):** Tap **Share** (`⎋`) &rarr; **Add to Home Screen** (➕).
+   - **Android (Chrome):** Tap **Menu** (`⋮`) &rarr; **Install app** / **Add to Home screen**.
+
+---
+
+## 🧪 Testing
+
+The test suite runs with Node's native `node:test` runner and `tsx`, requiring zero native binary dependencies:
+
 ```bash
 npm test
 ```
-All 25 automated unit and integration tests will execute.
 
-### 5. Build for Production
-```bash
-npm run build
+```
+TAP version 13
+ok 1 - Web Crypto Primitives & End-to-End Encryption (7 tests)
+ok 2 - Pairing & Device Management Lifecycle (5 tests)
+ok 3 - TransferService Operations (4 tests)
+ok 4 - Validation, Normalization & Sanitization (10 tests)
+# tests 26
+# suites 7
+# pass 26
+# fail 0
 ```
 
 ---
 
-## 🔒 Supabase Backend Setup
+## 🔒 Security Principles
 
-1. Create a project at [supabase.com](https://supabase.com/).
-2. Open the **SQL Editor** in your Supabase dashboard.
-3. Paste and run the entire migration file:
-   `supabase/migrations/20261012_init_bridge_schema.sql`
-4. This script automatically:
-   - Creates `profiles`, `devices`, `pairing_invitations`, `transfer_items`, and `audit_events` tables.
-   - Sets up performance indexes.
-   - Enables Row Level Security (RLS) on all tables with `auth.uid() = user_id` restrictions.
-   - Creates the private `transfers` storage bucket with folder-scoped RLS policies.
-   - Enables Supabase Realtime publication on `transfer_items`.
-5. In your Supabase Dashboard under **Project Settings &rarr; API**, copy:
-   - `Project URL` &rarr; `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon public key` &rarr; `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-6. Add these to `.env.local` or your Vercel project environment variables.
+- **Zero-Knowledge Architecture:** Cryptographic keys are generated in the browser using `crypto.subtle.generateKey` and stored solely in device `localStorage`. Ciphertext uploaded to Supabase cannot be decrypted by anyone without the key.
+- **Integrity Verification:** Every transfer includes an independent SHA-256 digest. File downloads verify the plaintext bytes against this digest before saving to disk.
+- **Short-Lived Ephemeral Pairing:** QR pairing codes automatically expire after 10 minutes to protect against interception.
+- **Sanitized Filenames & URLs:** Input validation prevents null-byte attacks, path traversal (`../`), dangerous file extensions (`.exe`, `.bat`, `.vbs`), and malicious schemes (`javascript:`, `data:`).
 
 ---
 
-## 🧩 Installing the Chrome Extension
-
-1. Open Google Chrome and navigate to `chrome://extensions`.
-2. Enable **Developer mode** (toggle in the top-right corner).
-3. Click **Load unpacked**.
-4. Select the `extension/` directory from this project (`Personal-Share/extension`).
-5. Pin the Bridge icon to your toolbar.
-6. **Usage:**
-   - On any webpage, press `Alt + Shift + B` or click the extension icon.
-   - Click **Send Page to Phone** to push the URL and title.
-   - Highlight any text on a webpage and click **Send Selected Text**.
-
----
-
-## 📱 Mobile PWA Installation & Share Menu
-
-1. On your phone (Android or iPhone), open your Bridge URL (e.g. `http://<your-lan-ip>:3000` or deployed Vercel HTTPS URL).
-2. **On Android (Chrome):**
-   - Tap the **Install** button on the in-app banner or tap Chrome's menu (`⋮`) &rarr; **Add to Home screen** / **Install app**.
-3. **On iOS (Safari):**
-   - Tap Safari's **Share** button (box with upward arrow) &rarr; scroll down &rarr; tap **Add to Home Screen**.
-4. **Phone-to-Laptop Transfers via OS Share Menu:**
-   - Bridge registers as a Web Share Target (`share_target` in `manifest.json`).
-   - When sharing a webpage or link from any app on your phone, choose **Bridge** from the share sheet to send it straight to your laptop inbox.
-
----
-
-## 🔐 Security & Privacy Architecture
-
-- **Zero-Knowledge Encryption:** Data is encrypted client-side using standard AES-GCM (256-bit key). The ciphertext is uploaded with an isolated random 12-byte IV and SHA-256 digest. Even database administrators cannot inspect your private links, notes, or files.
-- **Integrity Verification:** Every downloaded transfer item and file undergoes cryptographic SHA-256 verification against its checksum before presentation. Tampered or corrupted data is rejected.
-- **Short-Lived Pairing:** Device pairing invitations automatically expire after 10 minutes.
-- **Device Revocation:** The primary account owner can revoke any paired device at any time from the **Paired Devices** modal, immediately severing its access.
-- **Automated Retention:** Unpinned transfers expire according to your retention policy (default 72 hours).
-
----
-
-## 🚀 Deploying to Vercel
-
-1. Push this repository to a private GitHub repository:
-   ```bash
-   git add .
-   git commit -m "Initial Bridge release"
-   git remote add origin https://github.com/<your-username>/bridge.git
-   git push -u origin main
-   ```
-2. Log in to [vercel.com](https://vercel.com/) and click **Add New &rarr; Project**.
-3. Import your `bridge` repository.
-4. Under **Environment Variables**, add:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `NEXT_PUBLIC_APP_URL` (set to your Vercel production domain, e.g. `https://bridge.vercel.app`)
-5. Click **Deploy**. Vercel will build and provide a production HTTPS URL.
+## 📄 License
+MIT License. Built for seamless, private personal productivity.
