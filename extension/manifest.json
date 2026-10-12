@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Bridge - Send to Phone",
+  "version": "1.0.0",
+  "description": "Instant 1-click cross-device transfer for links, selected text, and notes to your phone.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Send to Phone (Bridge)",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "send-current-tab": {
+      "suggested_key": {
+        "default": "Alt+Shift+B"
+      },
+      "description": "Instantly send current page to my phone"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

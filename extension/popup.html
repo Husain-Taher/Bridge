@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bridge - Transfer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo">B</div>
+        <div>
+          <span class="title">Bridge</span>
+          <span class="badge">Companion</span>
+        </div>
+      </div>
+      <div class="status-indicator" id="status-indicator">
+        <span class="dot"></span>
+        <span id="status-text">Connected</span>
+      </div>
+    </header>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- Active Tab Info -->
+    <div class="tab-card">
+      <div class="tab-label">Current Page</div>
+      <div class="tab-title" id="tab-title">Loading active tab...</div>
+      <div class="tab-url" id="tab-url">...</div>
+    </div>
+
+    <!-- Primary Actions -->
+    <div class="action-buttons">
+      <button id="btn-send-tab" class="btn btn-primary">
+        <span class="icon">↗</span> Send Page to Phone
+      </button>
+
+      <button id="btn-send-selection" class="btn btn-secondary">
+        <span class="icon">❝</span> Send Selected Text
+      </button>
+    </div>
+
+    <!-- Quick Text Snippet -->
+    <div class="snippet-section">
+      <textarea id="snippet-input" placeholder="Quick snippet, note, or prompt..."></textarea>
+      <button id="btn-send-snippet" class="btn btn-small">Send Snippet</button>
+    </div>
+
+    <!-- Footer Settings & Pairing Link -->
+    <footer class="footer">
+      <span class="shortcut-tip">Shortcut: Alt+Shift+B</span>
+      <a href="#" id="link-open-bridge" class="footer-link">Open Inbox</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
