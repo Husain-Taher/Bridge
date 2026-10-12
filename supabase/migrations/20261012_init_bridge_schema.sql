@@ -91,78 +91,94 @@ ALTER TABLE public.transfer_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- RLS POLICIES: Strict user-boundary enforcement
+-- RLS POLICIES: Strict user-boundary enforcement (Idempotent)
 -- -----------------------------------------------------------------------------
 
 -- Profiles Policies
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile"
     ON public.profiles FOR SELECT
     USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
     ON public.profiles FOR UPDATE
     USING (auth.uid() = id)
     WITH CHECK (auth.uid() = id);
 
 -- Devices Policies
+DROP POLICY IF EXISTS "Users can view own registered devices" ON public.devices;
 CREATE POLICY "Users can view own registered devices"
     ON public.devices FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own devices" ON public.devices;
 CREATE POLICY "Users can insert own devices"
     ON public.devices FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own devices" ON public.devices;
 CREATE POLICY "Users can update own devices"
     ON public.devices FOR UPDATE
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own devices" ON public.devices;
 CREATE POLICY "Users can delete own devices"
     ON public.devices FOR DELETE
     USING (auth.uid() = user_id);
 
 -- Pairing Invitations Policies
+DROP POLICY IF EXISTS "Users can view own pairing invitations" ON public.pairing_invitations;
 CREATE POLICY "Users can view own pairing invitations"
     ON public.pairing_invitations FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own pairing invitations" ON public.pairing_invitations;
 CREATE POLICY "Users can insert own pairing invitations"
     ON public.pairing_invitations FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own pairing invitations" ON public.pairing_invitations;
 CREATE POLICY "Users can update own pairing invitations"
     ON public.pairing_invitations FOR UPDATE
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own pairing invitations" ON public.pairing_invitations;
 CREATE POLICY "Users can delete own pairing invitations"
     ON public.pairing_invitations FOR DELETE
     USING (auth.uid() = user_id);
 
 -- Transfer Items Policies
+DROP POLICY IF EXISTS "Users can view own active transfer items" ON public.transfer_items;
 CREATE POLICY "Users can view own active transfer items"
     ON public.transfer_items FOR SELECT
     USING (auth.uid() = user_id AND NOT is_deleted);
 
+DROP POLICY IF EXISTS "Users can insert own transfer items" ON public.transfer_items;
 CREATE POLICY "Users can insert own transfer items"
     ON public.transfer_items FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own transfer items" ON public.transfer_items;
 CREATE POLICY "Users can update own transfer items"
     ON public.transfer_items FOR UPDATE
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can soft-delete or hard-delete own items" ON public.transfer_items;
 CREATE POLICY "Users can soft-delete or hard-delete own items"
     ON public.transfer_items FOR DELETE
     USING (auth.uid() = user_id);
 
 -- Audit Events Policies
+DROP POLICY IF EXISTS "Users can view own audit events" ON public.audit_events;
 CREATE POLICY "Users can view own audit events"
     ON public.audit_events FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own audit events" ON public.audit_events;
 CREATE POLICY "Users can insert own audit events"
     ON public.audit_events FOR INSERT
     WITH CHECK (auth.uid() = user_id);
@@ -187,7 +203,6 @@ CREATE TRIGGER on_auth_user_created
 -- -----------------------------------------------------------------------------
 -- STORAGE CONFIGURATION & POLICIES (Supabase Storage: 'transfers')
 -- -----------------------------------------------------------------------------
--- Insert bucket if storage schema exists
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'transfers',
@@ -199,6 +214,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage RLS: allow authenticated users to manage files in their own folder
+DROP POLICY IF EXISTS "Users can read own encrypted transfers" ON storage.objects;
 CREATE POLICY "Users can read own encrypted transfers"
     ON storage.objects FOR SELECT
     USING (
@@ -207,6 +223,7 @@ CREATE POLICY "Users can read own encrypted transfers"
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
 
+DROP POLICY IF EXISTS "Users can upload own encrypted transfers" ON storage.objects;
 CREATE POLICY "Users can upload own encrypted transfers"
     ON storage.objects FOR INSERT
     WITH CHECK (
@@ -215,6 +232,7 @@ CREATE POLICY "Users can upload own encrypted transfers"
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
 
+DROP POLICY IF EXISTS "Users can update own encrypted transfers" ON storage.objects;
 CREATE POLICY "Users can update own encrypted transfers"
     ON storage.objects FOR UPDATE
     USING (
@@ -223,6 +241,7 @@ CREATE POLICY "Users can update own encrypted transfers"
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
 
+DROP POLICY IF EXISTS "Users can delete own encrypted transfers" ON storage.objects;
 CREATE POLICY "Users can delete own encrypted transfers"
     ON storage.objects FOR DELETE
     USING (
@@ -231,5 +250,15 @@ CREATE POLICY "Users can delete own encrypted transfers"
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
 
--- Enable Realtime publication for transfer_items table
-ALTER PUBLICATION supabase_realtime ADD TABLE public.transfer_items;
+-- Enable Realtime publication for transfer_items table safely
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' 
+        AND schemaname = 'public' 
+        AND tablename = 'transfer_items'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.transfer_items;
+    END IF;
+END $$;
